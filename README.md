@@ -1,272 +1,127 @@
-# HackForge
+# HackForge 🔨
 
-HackForge is a C++20 adversarial test generation and stress-testing engine for
-competitive-programming solutions. Given a target executable and a small input
-schema, it generates valid tests, mutates promising cases, executes the target,
-measures runtime/resources, and evolves toward pathological inputs.
+HackForge is a deterministic, evolutionary adversarial testing engine for competitive programming. 
 
-Normal random testing often misses worst-case competitive-programming inputs
-because the bad cases are structured: sorted arrays for poor quicksort pivots,
-long repeated strings for hidden quadratic scans, dense graphs for O(VE)
-algorithms, and so on. HackForge keeps the input structure intact while it
-searches, so mutations stay valid instead of becoming random bytes.
+Standard randomized testing (like generating arrays of random numbers) almost never triggers algorithmic edge cases. HackForge uses a structured **YAML Schema**, an **Evolutionary Fuzzer**, and a **Delta-Debugging Minimizer** to actively hunt for inputs that cause Time Limit Exceeded (TLE) or Runtime Error (Crash) verdicts in your code.
 
-## Status
+## 🚀 The "I Just Want to Test My Code" Guide
+You don't need to understand ASTs or mutations to use this. If you are grinding for Candidate Master and keep getting TLE on Test 42, here is how you break your code locally.
 
-This repository contains a working backend MVP:
-
-- C++20 core engine with CMake build files.
-- Dependency-free YAML-subset schema parser.
-- Structural input AST and stdin serialization.
-- Schema-aware generators for integers, arrays, strings, and permutations.
-- Schema-preserving mutators for boundaries, sorted/reversed arrays, long runs,
-  alternating extremes, string patterns, and permutation perturbations.
-- POSIX executor using `fork`, `execv`, pipes, `wait4`, timeout kill, CPU timing,
-  exit/signal reporting, and `getrusage` memory reporting where available.
-- Fitness, ranked corpus, deterministic seeding, artifact persistence.
-- CLI commands: `run`, `replay`, `minimize`, and `inspect`.
-- Benchmarks for bad quicksort, hidden quadratic string scanning, and graph
-  stress.
-- Lightweight automated tests covering the core MVP.
-
-HackForge is a stress-testing executor, not a secure sandbox. Do not run
-untrusted programs with it expecting isolation.
-
-## Architecture
-
-```text
-Schema
-  -> Generator
-  -> InputCase AST
-  -> Mutator
-  -> Executor
-  -> Measurement
-  -> Fitness
-  -> Corpus
-  -> Evolutionary Search
-  -> Artifacts / Replay / Minimization
-```
-
-Main modules live under `include/hackforge/` and `src/`:
-
-```text
-schema      YAML-subset schema parsing and reference bounds
-ast         structural input values, serialization, validation, repair
-generator   CP-shaped seed generation
-mutator     schema-preserving mutations
-executor    POSIX process execution and measurement
-fitness     runtime/resource/crash scoring
-corpus      ranking, deduplication, persistence
-fuzzer      evolutionary search loop
-minimizer   basic structure-aware testcase reduction
-cli         run/replay/minimize/inspect commands
-```
-
-## Build
-
-Primary build:
-
+**Step 1: Write your target code**
+Save your solution as a standard C++ file (e.g., `my_solution.cpp`) and compile it:
 ```bash
-cmake -S . -B build
-cmake --build build
-ctest --test-dir build
+g++ my_solution.cpp -o my_solution
 ```
 
-This development shell did not have `cmake` installed, so the repository also
-includes a fallback build script that uses the system C++ compiler directly:
-
-```bash
-scripts/build_local.sh
-./build/hackforge_tests ./build/benchmarks/targets/bad_quicksort
-```
-
-Verified locally:
-
-```text
-Built HackForge in /Users/sakshampal/hackforge-1/build
-All HackForge tests passed
-```
-
-## Quick Start
-
-Inspect a schema:
-
-```bash
-./build/hackforge inspect --schema benchmarks/schemas/quicksort.yaml
-```
-
-Run a search campaign:
-
-```bash
-./build/hackforge run \
-  --target ./build/benchmarks/targets/bad_quicksort \
-  --schema benchmarks/schemas/quicksort.yaml \
-  --iterations 300 \
-  --timeout 20 \
-  --seed 123 \
-  --output artifacts/quicksort_tle_demo
-```
-
-Replay the best saved case:
-
-```bash
-./build/hackforge replay \
-  --target ./build/benchmarks/targets/bad_quicksort \
-  --input artifacts/quicksort_tle_demo/best_case.txt \
-  --timeout 20
-```
-
-Minimize it while preserving the timeout:
-
-```bash
-./build/hackforge minimize \
-  --target ./build/benchmarks/targets/bad_quicksort \
-  --schema benchmarks/schemas/quicksort.yaml \
-  --input artifacts/quicksort_tle_demo/best_case.txt \
-  --timeout 20 \
-  --output artifacts/quicksort_tle_demo/minimized_case.txt
-```
-
-## Schema Example
-
+**Step 2: Write a Schema**
+Tell HackForge what a valid test case looks like. Create a file called `schema.yaml`:
 ```yaml
-name: bad_quicksort
-
+name: array_test
 variables:
   - name: n
     type: int
     min: 1
-    max: 7000
-
+    max: 5000
   - name: a
     type: array<int>
     length: n
-    min: -1000000
-    max: 1000000
+    min: -10000
+    max: 10000
 ```
 
-Supported MVP field types:
+**Step 3: Unleash HackForge**
+Run a fuzzing campaign to find the worst-case input for your code:
+```bash
+./build/hackforge run --target ./my_solution --schema schema.yaml --iterations 1000 --output artifacts/
+```
 
-- `int`
-- `array<int>`
-- `string`
-- `permutation`
+Check `artifacts/best_case.txt`. If your algorithm has a hidden O(N^2) trap, HackForge just found it.
 
-References such as `length: n` and `max: n` are resolved from earlier integer
-fields. If a mutation changes `n`, dependent fields are repaired to remain
-valid.
+---
 
-## Benchmarks
+## 🧠 How the Engine Works (Code Flow)
 
-Benchmark targets are under `benchmarks/targets/` with schemas under
-`benchmarks/schemas/`.
+HackForge is built on a modular pipeline designed for speed and deterministic execution.
 
-Measured on the local macOS development environment in this repository:
+1. **Schema Parsing (`schema.cpp`):** Reads the YAML file and establishes the strict mathematical rules (bounds, dependencies) for the input.
+2. **Generation (`generator.cpp`):** An MT19937_64 RNG engine generates initial Abstract Syntax Trees (ASTs) that strictly obey the schema.
+3. **Execution (`executor.cpp`):** The engine forks a child process, pipes the serialized AST as standard input, and measures algorithmic CPU time, Wall time, and memory usage via POSIX APIs.
+4. **Fitness & Corpus (`fitness.cpp` & `corpus.cpp`):** The engine scores the execution. Crashes and TLEs are prized. High-scoring inputs are saved to a Tournament-Selection Corpus.
+5. **Evolutionary Mutation (`mutator.cpp`):** The Fuzzer grabs the best inputs from the Corpus and mutates them (e.g., sorting arrays, reversing, boundary testing). **Cascading Logic** ensures that if an integer `n` is mutated, any array depending on `n` is safely resized without violating the schema.
+6. **Minimization (`minimizer.cpp`):** Once a pathological input is found, a delta-debugging algorithm zeros out chunks of the input to find the smallest, most readable test case that still breaks the target.
 
+---
+
+## 📂 Project Architecture & File Index
+
+### Technologies Used
+* **Core Engine:** C++20
+* **Build System:** CMake, CTest
+* **Dependencies:** `yaml-cpp` (Fetched dynamically at build)
+* **Upcoming Infrastructure:** Node.js (API), Next.js (UI), Docker (Containerization)
+
+### Directory Structure
 ```text
-bad_quicksort, 300 iterations, timeout 20 ms, seed 123
-Executions:   300
-Exec/sec:     112
-Best runtime: 20.595 ms
-Best verdict: TLE
-Saved:        artifacts/quicksort_tle_demo/best_case.txt
+hackforge/
+├── CMakeLists.txt              # Core build configuration
+├── include/hackforge/          # C++ Header declarations
+│   ├── ast.hpp                 # Defines InputAST and internal Variables
+│   ├── corpus.hpp              # Bounded tournament-selection memory
+│   ├── executor.hpp            # POSIX process runner & resource tracker
+│   ├── fitness.hpp             # CPU-weighted scoring logic
+│   ├── fuzzer.hpp              # The main evolutionary loop
+│   ├── generator.hpp           # Deterministic structure builder
+│   ├── minimizer.hpp           # Delta-debugging reduction engine
+│   ├── mutator.hpp             # Schema-preserving mutation logic
+│   └── schema.hpp              # YAML validation rules
+├── src/                        # C++ Implementations
+│   ├── ast.cpp                 # AST Serialization and text parsing
+│   ├── cli.cpp                 # CLI argument routing 
+│   ├── corpus.cpp              # Deduplication and tournament logic
+│   ├── executor.cpp            # fork(), exec(), getrusage() internals
+│   ├── fitness.cpp             # Mathematical evaluation of OS noise vs Algorithmic load
+│   ├── fuzzer.cpp              # 25/75 Gen/Mutate campaign router
+│   ├── generator.cpp           # Type-specific distribution engines
+│   ├── main.cpp                # The core binary entry point
+│   ├── minimizer.cpp           # Shrinks adversarial cases
+│   ├── mutator.cpp             # Dynamic bounded array/string/int manipulators
+│   └── schema.cpp              # yaml-cpp ingestion
+├── benchmarks/                 # Intentionally vulnerable targets to test the engine
+│   ├── bad_quicksort.cpp       # Lomuto O(N^2) trap
+│   ├── graph_stress.cpp        # Bellman-Ford dense graph trap
+│   ├── hidden_quadratic.cpp    # Magic number O(N^2) trap
+│   └── schemas/                # YAML schemas for the benchmarks
+└── tests/                      # Automated CTest Suites
+    ├── fixtures/               # Tiny YAML files for parser testing
+    ├── helpers/                # Dummy binaries (sleep, crash, burn CPU)
+    └── test_*.cpp              # Individual unit and integration tests
 ```
 
-Replay of the saved quicksort case:
+---
 
-```text
-Verdict:      TLE
-Runtime:      20.671 ms
-CPU time:     20.027 ms
-Max RSS:      1.6 MB
-Signal:       9
+## 💻 Developer Commands
+
+**1. Clean Build the Engine**
+```bash
+rm -rf build && cmake -S . -B build && cmake --build build -j
 ```
 
-Structured minimization of that case:
-
-```text
-Baseline:     20.896 ms (TLE)
-Minimized:    20.461 ms (TLE)
-Attempts:     120
-Changed:      yes
+**2. Run the CTest Suite**
+```bash
+ctest --test-dir build -V
 ```
 
-Additional benchmark sanity runs:
-
-```text
-hidden_quadratic, 150 iterations, timeout 50 ms, seed 77
-Executions:   150
-Exec/sec:     115
-Best runtime: 51.501 ms
-Best verdict: TLE
-
-graph_stress, 100 iterations, timeout 50 ms, seed 88
-Executions:   100
-Exec/sec:     56
-Best runtime: 51.291 ms
-Best verdict: TLE
+**3. Run a Fuzzing Campaign**
+```bash
+./build/hackforge run --target <binary> --schema <yaml> --iterations 1000 --timeout 2000 --seed 1337 --output artifacts/
 ```
 
-Timing varies by machine and load. These numbers are examples from one local
-run, not hard-coded test assertions.
-
-## Determinism
-
-The generator uses `std::mt19937_64` and `--seed`. Two one-iteration CLI runs
-with `--seed 4242` produced byte-identical `best_case.txt` files:
-
-```text
-cmp artifacts/determinism_a/best_case.txt artifacts/determinism_b/best_case.txt
-exit code: 0
+**4. Replay a Specific Input**
+```bash
+./build/hackforge replay --target <binary> --input artifacts/best_case.txt
 ```
 
-Full multi-iteration campaigns can still differ slightly in ranking because
-runtime measurements contain normal OS scheduling noise.
-
-## macOS and Linux Notes
-
-The MVP uses portable POSIX primitives and works on macOS:
-
-- wall-clock timing via `std::chrono`
-- CPU time and max RSS via `wait4`/`getrusage`
-- timeout enforcement by killing the child process
-- optional address-space memory limit when `RLIMIT_AS` is supported
-
-Linux-specific enhancements such as `perf_event_open`, stronger resource
-controls, and hardware performance counters are intentionally not mandatory.
-HackForge never fakes unavailable hardware measurements.
-
-## Repository Structure
-
-```text
-.
-├── CMakeLists.txt
-├── README.md
-├── include/hackforge/
-├── src/
-├── tests/
-├── benchmarks/
-│   ├── targets/
-│   └── schemas/
-├── scripts/
-├── docs/
-├── examples/
-└── artifacts/        # generated, ignored by git
+**5. Minimize a Discovered Exploit**
+```bash
+./build/hackforge minimize --target <binary> --schema <yaml> --input artifacts/best_case.txt --output artifacts/minimized.txt
 ```
-
-## Limitations
-
-- The schema language is intentionally small; it is not a constraint solver.
-- The executor is not a security sandbox.
-- The minimizer is basic and currently strongest for array/permutation inputs.
-- Memory reporting depends on what the host OS exposes through `getrusage`.
-- The search strategy is a simple evolutionary/hill-climbing loop, not a
-  research-grade genetic algorithm.
-
-## Future Work
-
-- Optional Linux `perf_event_open` instruction counters.
-- Richer schema constraints for graphs and paired records.
-- More mutation operators and corpus import/export.
-- Coverage-guided or differential-testing modes.
-- Frontend/API layer after the backend stabilizes.
