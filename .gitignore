@@ -1,0 +1,66 @@
+# Build
+build/
+cmake-build-*/
+out/
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+compile_commands.json
+CTestTestfile.cmake
+_install/
+
+# macOS
+.DS_Store
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Runtime artifacts
+artifacts/
+corpus/
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Generated binaries
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+
+# Test outputs
+test-results/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Python (if helper scripts are added later)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node / frontend (for Phase 2)
+node_modules/
+.next/
+dist/
+.vercel/
+
+# Coverage / profiling
+coverage/
+*.gcda
+*.gcno
+*.prof
