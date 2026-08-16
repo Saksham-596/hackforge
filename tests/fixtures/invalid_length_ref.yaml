@@ -1,0 +1,7 @@
+name: bad_ref
+variables:
+  - name: arr
+    type: array<int>
+    length: missing_var
+    min: 1
+    max: 10

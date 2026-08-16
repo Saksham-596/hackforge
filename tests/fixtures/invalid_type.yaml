@@ -1,0 +1,6 @@
+name: bad_type
+variables:
+  - name: x
+    type: float
+    min: 1
+    max: 10

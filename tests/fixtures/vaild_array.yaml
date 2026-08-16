@@ -1,0 +1,11 @@
+name: simple_array
+variables:
+  - name: n
+    type: int
+    min: 1
+    max: 10
+  - name: arr
+    type: array<int>
+    length: n
+    min: -50
+    max: 50

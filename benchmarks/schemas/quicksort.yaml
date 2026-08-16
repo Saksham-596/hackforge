@@ -1,0 +1,11 @@
+name: bad_quicksort
+variables:
+  - name: n
+    type: int
+    min: 1000
+    max: 5000
+  - name: a
+    type: array<int>
+    length: n
+    min: -10000
+    max: 10000

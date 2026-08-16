@@ -1,0 +1,6 @@
+name: simple_int
+variables:
+  - name: x
+    type: int
+    min: 1
+    max: 100

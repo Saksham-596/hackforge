@@ -1,0 +1,6 @@
+name: bad_range
+variables:
+  - name: x
+    type: int
+    min: 10
+    max: 1
